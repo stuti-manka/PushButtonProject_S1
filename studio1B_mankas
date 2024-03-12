@@ -1,0 +1,163 @@
+;Template - Defining an Assembly File 
+; Stuti Manka
+; February 11th 2024
+; Goal Studio 1A : Switch on D3 (Port F function)
+; Goal Studio 1B : When button is pushed, the light turns off and when its released light turns on
+
+; ----------------------------
+; NOTES
+; Basic method for communicating witht he processor is to use the user pins
+; There are 4 user pins on the board [D1 - D4] ** these are the green LEDs 
+; 
+; We will be looking at registers relevant for input/output operations (GPIO)
+; 2 types of GPIO: 
+; 1. registers that control a particular function for entire GPIO port
+; 2. registers that control the functionality of e/ bit in a GPIO port
+; ----------------------------
+
+
+; ADDRESS SETUP
+; Define your I/O Port Addresses Here
+; ---------
+; The RCGCGPIO enables the clock for a given GPIO port, i.e., e/ bit in register enables a full port
+; we want to find the bit that enables the clock for port F
+; to do this:
+; 	1. how do we change values of bits in RCGCGPIO
+; 	2. which bit controls port F (b/c D3 = port F Pin 4 (PF4))
+; There are 3 GPIO_PortF registers, data, den and dir.
+; we need to find the offsets of these 3 registers also.
+; GPIODATA (Offset = 0x0) 
+; GPIODIR (Offset = 0x400) Direction
+; GPIODEN (Offset = 0x51C) Digital Enable
+; ---------
+
+SYSCTL_RCGCGPIO_R             EQU     0x400FE608         ;Step 1: GPIO Run Mode Clock Gating Control Register Address
+GPIO_PORTF_DIR_R              EQU     0x4005D400         ;Step 3: GPIO Port F DIR Register Address
+GPIO_PORTF_DEN_R              EQU     0x4005D51C         ;Step 4: GPIO Port F DEN Register Address
+GPIO_PORTF_DATA_R             EQU     0x4005D3FC         ;Step 5: GPIO Port F DATA Register Address
+
+GPIO_PORTL_DIR_R              EQU     0x40062400         
+GPIO_PORTL_DEN_R              EQU     0x4006251C         
+GPIO_PORTL_DATA_R             EQU     0x400623FC ;not sure where the 3FC came from
+
+; RCGCGPIO register has an offset = 0x608 [reset = 0x00]
+; All relative to the System Control base address of 0x400FE000
+
+        AREA    |.text|, CODE, READONLY, ALIGN=2
+        THUMB
+        EXPORT Start
+
+; In GPIO Register in reference manual we found the base address of GPIO port
+; GPIO Port F (AHB): 0x4005D000 (ending address of 0x4005DFFF
+; GPIO Port L (AHB): 0x40062000 (ending address of 0x40062FFF)
+
+;Function PortF_Init
+;Enable PortF and set bit PF4 for digital output
+PortF_Init 
+
+; we know to change bit 5 in step 1 b/c Reference manual says
+; that bit 5 controls port F (found n RCGCGPIO Table)
+
+		;STEP 1 Activate clock (Set bit 5 in RCGCGPIO; In C pseudcode: SYSCTL_RCGCGPIO_R |= #0x20)
+		 LDR R1, =SYSCTL_RCGCGPIO_R		;Stores the address of the RCGCGPIO register in R1
+		 LDR R0, [R1]					;Dereferences R1 to put the contents of the RCGCGPIO register in R0
+		 ORR R0,R0, #0x20				;Modifies the contents of R0 to set bit 5 without changing other bits
+		 STR R0, [R1]					;Stores the new value into the RCGCGPIO register
+		
+		;STEP 2: Wait for Peripheral Ready
+		 NOP
+		 NOP
+		 
+		
+		;STEP 3: Set Port Direction (set bit 4 to 1 for output)
+		LDR R1, =GPIO_PORTF_DIR_R		 ;Load the memory address of the GPIODIR Port F Register into R1 (pointer)
+		LDR R0, [R1]			         ;Load the contents from the memory address of GPIODIR Port F Register into R0
+		ORR R0, R0,	#0x10		;Modify the contents of R0 to set bit 4 without changing other bits
+		STR R0, [R1]			            ;Store what is in R0 into address pointed by R1 
+		 
+		;STEP 4: Enable Digital Functioning (set bit 4 to 1 for digital enable)
+		LDR R1, =GPIO_PORTF_DEN_R			;Load the memory address of the GPIODEN Port F Register into R1 (pointer)
+		LDR R0, [R1]			;Load the contents from the memory address of GPIODEN Port F Register into R0
+		ORR R0, R0,	#0x10			;Modify the contents of R0 to set bit 4 without changing other bits
+		STR R0, [R1]			;Store what is in R0 into address pointed by R1 
+
+        BX LR               ; return from function 
+	
+	
+PortL_Init 
+
+; we know to change bit 10 in step 1 b/c Reference manual says
+; that bit 10 controls port L (found in RCGCGPIO Table)
+
+		;STEP 1 Activate clock (Set bit 5 in RCGCGPIO; In C pseudcode: SYSCTL_RCGCGPIO_R |= #0x20)
+		 LDR R1, =SYSCTL_RCGCGPIO_R		;Stores the address of the RCGCGPIO register in R1
+		 LDR R0, [R1]					;Dereferences R1 to put the contents of the RCGCGPIO register in R0
+		 ORR R0,R0, #0x400				;Modifies the contents of R0 to set bit 10 without changing other bits
+		 STR R0, [R1]					;Stores the new value into the RCGCGPIO register
+		
+		;STEP 2: Wait for Peripheral Ready
+		 NOP
+		 NOP
+		 
+		
+		;STEP 3: Set Port Direction (CLEAR bit 0 to 0 for output)
+		LDR R1, =GPIO_PORTL_DIR_R		 ;Load the memory address of the GPIODIR Port F Register into R1 (pointer)
+		LDR R0, [R1]			         ;Load the contents from the memory address of GPIODIR Port F Register into R0
+		AND R0, R0,	#0xFE		;Modify the contents of R0 to clear bit 0 without changing other bits
+		STR R0, [R1]			            ;Store what is in R0 into address pointed by R1 
+		 
+		;STEP 4: Enable Digital Functioning (SET bit 0 to 1 for digital enable)
+		LDR R1, =GPIO_PORTL_DEN_R			;Load the memory address of the GPIODEN Port F Register into R1 (pointer)
+		LDR R0, [R1]			;Load the contents from the memory address of GPIODEN Port F Register into R0
+		AND R0, R0,	#0x01			;Modify the contents of R0 to clear bit 0 without changing other bits
+		STR R0, [R1]			;Store what is in R0 into address pointed by R1 
+
+        BX LR               ; return from function
+		
+		
+		
+       
+Start 
+	    BL PortF_Init       ; call and execute PortF_Init
+		BL PortL_Init       		
+        
+; we need program to read the input
+; check if input is 0 (this is checking pin PL0)
+; if 0 then switch light off, otherwise keep on.
+
+; Thus, the light will always remain on, until button is pressed
+
+LightON 
+		LDR R1, =GPIO_PORTF_DATA_R		;Load the memory address of the GPIODATA Port F Register into R1 (pointer)
+		LDR R0, [R1]			;Load the contents from the memory address of GPIODATA Port F Register into R0
+		ORR R0, R0,	#0x10			;Modify the contents of R0 to set bit 4 without changing other bits
+		STR R0, [R1]
+
+; we need to be constantly reading input from port L data GPIO
+WaitForButtonPress
+		LDR R1, =GPIO_PORTL_DATA_R
+		LDR R0, [R1]
+		AND R0, R0, #0x01 ;clear all values except bit 0
+		CMP R0, #0 ; check if value of port L input is 0
+		BNE WaitForButtonPress
+		
+		; if value is 0, turn off light through changing port F contents
+		LDR R1, =GPIO_PORTF_DATA_R
+		LDR R0, [R1]
+		AND R0, R0,	#0xEF ;this is done by clearing 4th bit
+		STR R0, [R1]
+		
+		;constantly check value of  port L to see when button is released
+WaitForButtonRelease
+		LDR R1, =GPIO_PORTL_DATA_R
+		LDR R0, [R1]
+		AND R0, R0, #0x01
+		CMP R0, #0x1 ; check if value of port L input is 1
+		BNE WaitForButtonRelease
+		
+		; if value is 1, turn light back on
+		B LightON
+		
+		
+		ALIGN
+		END
